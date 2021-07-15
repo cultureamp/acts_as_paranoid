@@ -163,10 +163,10 @@ module ActsAsParanoid
       end
     end
 
-    def destroy!
+    def destroy!(raise_error: true)
       if !deleted?
         with_transaction_returning_status do
-          run_callbacks :destroy do
+          result = run_callbacks :destroy do
             if persisted?
               # Handle composite keys, otherwise we would just use
               # `self.class.primary_key.to_sym => self.id`.
@@ -180,13 +180,25 @@ module ActsAsParanoid
             stale_paranoid_value
             self
           end
+
+          # If the callback chain was halted, returns false.
+          # Otherwise returns the result of the block,
+          # nil if no callbacks have been set,
+          # or true if callbacks have been set but no block is given.
+          if raise_error && (result == false)
+            raise ActiveRecord::RecordNotDestroyed.new("Failed to destroy the record", self)
+          end
+
+          result
         end
       elsif paranoid_configuration[:double_tap_destroys_fully]
         destroy_fully!
       end
     end
 
-    alias destroy destroy!
+    def destroy
+      destroy!(raise_error: false)
+    end
 
     def recover(options = {})
       return if !deleted?
